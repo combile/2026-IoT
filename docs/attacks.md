@@ -83,7 +83,7 @@ python scripts/make_sweep.py configs/experiments/lf_sweep.yaml --check-results r
 | 악성 지정 방식 | fixed | `configs/attack/*.yaml` |
 | 공격 구간 | 100 ≤ r < 200 | `configs/attack/*.yaml` |
 | 클라이언트 수·참여율·라운드 수 | 100명 · 0.1 (n=10) · 미정 | `configs/experiments/*_sweep.yaml` |
-| 집계 override 이름 | `+server.aggregator={mean,krum,...}` | 우은식 님 구현에 맞춰 수정 |
+| 방어자가 가정하는 악성 비율 | 0.3 (f = floor(0.3·n)) | `configs/defense/default.yaml` |
 
 ## 테스트
 

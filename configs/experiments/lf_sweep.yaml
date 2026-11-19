@@ -10,13 +10,14 @@ algorithms:
   fedavg: "server=base client=base"
   fedacg: "server=FedACG client=ACG server.momentum=0.85 client.prox_loss.weight=0.01"
 
-# 집계 방식 이름과 override 형식은 우은식 님의 집계 구현에 맞춰 고친다  [TBD]
+# 집계 방식 이름: defenses/aggregators.py의 AGGREGATORS. 방어 설정은 configs/defense/default.yaml
 aggregators: [mean, krum, multikrum, trimmedmean, median]
 aggregator_override: "+server.aggregator={agg}"
 
 # 모든 실행에 붙는 공통 설정 (공통 지침 표)
 # trainer.num_clients, participation_rate, global_rounds는 첫 회의 결과로 바꾼다  [TBD]
 common: >-
+  +defense=default
   split.mode=dirichlet split.alpha=0.3
   batch_size=50 trainer.local_lr=0.1 optimizer.wd=1e-3 trainer.local_epochs=5
   trainer.num_clients=100 trainer.participation_rate=0.1
