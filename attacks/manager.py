@@ -51,7 +51,7 @@ class RoundAttackInfo:
 
 class AttackManager:
     def __init__(self, cfg: AttackConfig, num_clients: int, num_classes: int, seed: int,
-                 log_path: Optional[Union[str, Path]] = None):
+                 log_path: Optional[Union[str, Path]] = None, start_round: int = 0):
         self.cfg = cfg
         self.num_clients = num_clients
         self.num_classes = num_classes
@@ -66,17 +66,23 @@ class AttackManager:
         if log_path is not None:
             self.log_path = Path(log_path)
             self.log_path.parent.mkdir(parents=True, exist_ok=True)
-            # 지표 CSV(metrics.MetricsLogger)와 같게 실행마다 새로 쓴다
-            with open(self.log_path, "w", newline="") as f:
-                csv.writer(f).writerow(RoundAttackInfo.FIELDS)
+            if start_round > 0:
+                # 이어 돌리기: 체크포인트 이전 라운드 기록은 남기고 그 뒤는 지운다
+                from resume.csv_rows import truncate_rows
+                truncate_rows(self.log_path, start_round, RoundAttackInfo.FIELDS)
+            else:
+                # 지표 CSV(metrics.MetricsLogger)와 같게 실행마다 새로 쓴다
+                with open(self.log_path, "w", newline="") as f:
+                    csv.writer(f).writerow(RoundAttackInfo.FIELDS)
 
     # ---- 생성 ----
     @classmethod
-    def from_args(cls, args: Any, num_classes: int) -> "AttackManager":
+    def from_args(cls, args: Any, num_classes: int, start_round: int = 0) -> "AttackManager":
         """Hydra args에서 만든다. args.attack이 없으면 무공격으로 본다.
 
         args.metrics.results_dir가 있으면 공격 기록을 지표 CSV와 같은 이름으로
         results/attack_logs/에 남긴다(예: results/attack_logs/fedacg_krum_lf_20_s1.csv).
+        start_round > 0(이어 돌리기)이면 그 라운드 이전 기록은 남긴다.
         """
         attack_cfg = args.get("attack") if hasattr(args, "get") else getattr(args, "attack", None)
         if attack_cfg is None:
@@ -86,7 +92,8 @@ class AttackManager:
                    num_clients=int(args.trainer.num_clients),
                    num_classes=int(num_classes),
                    seed=int(args.seed),
-                   log_path=_default_log_path(args, cfg))
+                   log_path=_default_log_path(args, cfg),
+                   start_round=start_round)
 
     # ---- 판정 ----
     @property

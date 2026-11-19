@@ -1,0 +1,100 @@
+diff --git a/configs/config.yaml b/configs/config.yaml
+index f8dc502..6a82702 100755
+--- a/configs/config.yaml
++++ b/configs/config.yaml
+@@ -63,6 +63,7 @@ defaults:
+   - model: resnet18
+   - attack: none
+   - metrics: default
++  - resume: default
+   - override hydra/job_logging: colorlog_custom
+   - override hydra/hydra_logging: colorlog
+ 
+diff --git a/trainers/base_trainer.py b/trainers/base_trainer.py
+index 85078b7..d62e211 100755
+--- a/trainers/base_trainer.py
++++ b/trainers/base_trainer.py
+@@ -32,6 +32,7 @@ from utils import terminate_processes, initalize_random_seed, save_checkpoint
+ from attacks import AttackManager
+ from attacks import parse_attack_config
+ from metrics import MetricsLogger, momentum_norm, result_csv_name, round_summary, setup_run_logging
++from resume import ResumeManager, restore_rng
+ import csv
+ from omegaconf import DictConfig,OmegaConf
+ 
+@@ -76,8 +77,12 @@ class Trainer():
+ 
+         # [Metrics] 화면에는 라운드 요약과 경고만, 전체 로그는 실행별 파일 results/logs/<결과 이름>.log에 남긴다
+         self.result_name = result_csv_name(self.args, parse_attack_config(self.args.attack))
++        # [Resume] 같은 이름의 체크포인트가 있으면 그 다음 라운드부터 이어 돈다 (configs/resume/default.yaml)
++        self.resume = ResumeManager.from_args(self.args, self.result_name)
++        self.resume_state = self.resume.load() if self.resume is not None else None
++        resume_round = ResumeManager.start_round(self.resume_state)
+         log_path = Path(self.args.metrics.results_dir) / "logs" / Path(self.result_name).with_suffix(".log")
+-        setup_run_logging(log_path, console_level=self.args.metrics.console_level)
++        setup_run_logging(log_path, console_level=self.args.metrics.console_level, append=resume_round > 0)
+         logger.warning(f"Full log : {log_path}")
+ 
+         self.checkpoint_path = Path(self.args.checkpoint_path)
+@@ -108,13 +113,15 @@ class Trainer():
+         self.local_dataset_split_ids = get_dataset(self.args, self.datasets['train'], mode=self.args.split.mode)
+ 
+         # Attack (configs/attack/*.yaml). attack 설정이 없으면 무공격으로 동작한다.
+-        self.attack = AttackManager.from_args(self.args, num_classes=len(self.datasets['train'].classes))
++        self.attack = AttackManager.from_args(self.args, num_classes=len(self.datasets['train'].classes),
++                                              start_round=resume_round)
+         self.attack_log = []
+         logger.info(f"Attack: {self.attack.cfg}")
+ 
+         # [Metrics] 결과 CSV: 라운드별 정확도, EMA 정확도, ‖m‖ (configs/metrics/default.yaml)
+         metrics_path = Path(self.args.metrics.results_dir) / self.result_name
+-        self.metrics = MetricsLogger(metrics_path, ema_coef=self.args.metrics.ema)
++        self.metrics = MetricsLogger(metrics_path, ema_coef=self.args.metrics.ema, start_round=resume_round,
++                                     ema=self.resume_state["ema"] if self.resume_state else None)
+         logger.warning(f"Metrics CSV : {metrics_path}")
+ 
+         test_loader = DataLoader(self.datasets["test"],
+@@ -135,6 +142,12 @@ class Trainer():
+         if self.args.get('load_model_path'):
+             self.load_model()
+ 
++        # [Resume] 모델과 서버 모멘텀 m을 체크포인트 시점으로 되돌린다. 난수 상태는 train() 시작 직전에 되돌린다.
++        if self.resume_state is not None:
++            ResumeManager.restore(self.resume_state, self.model, self.server)
++            self.start_round = resume_round
++            logger.warning(f"Resume from round {resume_round} ({self.resume.path})")
++
+         if self.args.client.get('Dyn'):
+             local_g = copy.deepcopy(self.model.state_dict())
+             for key in local_g.keys():
+@@ -201,6 +214,10 @@ class Trainer():
+                 p.start()
+ 
+ 
++        if self.resume_state is not None:
++            restore_rng(self.resume_state["rng"])
++            self.resume_state = None   # 메모리 해제
++
+         for epoch in range(self.start_round, self.global_rounds):
+ 
+             self.lr_update(epoch=epoch)
+@@ -304,6 +321,10 @@ class Trainer():
+                 self.save_model(epoch=epoch)
+ 
+             self.wandb_log(wandb_dict, step=epoch)
++
++            # [Resume] resume.every라운드마다 체크포인트 저장 (모델, m, EMA, 난수 상태)
++            if self.resume is not None and self.resume.should_save(epoch, self.global_rounds - 1):
++                self.resume.save(epoch, self.model, self.server, self.metrics.ema)
+             gc.collect()
+ 
+ 
+@@ -312,6 +333,8 @@ class Trainer():
+             terminate_processes(task_queues, processes)
+ 
+         self.save_attack_log()
++        if self.resume is not None:
++            self.resume.finish()
+ 
+         return
+ 
