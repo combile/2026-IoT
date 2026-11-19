@@ -1,0 +1,4 @@
+# 지표 로깅 (공통 지침: 정확도는 계수 0.9 지수이동평균)
+ema: 0.9                  # EMA 계수. ema <- 0.9 * ema + 0.1 * acc
+results_dir: results      # 결과 CSV를 모으는 폴더 (실행 위치 기준). 전체 로그는 results/logs/
+console_level: WARNING    # 화면에 찍을 최소 수준. WARNING이면 라운드 요약 한 줄과 경고만 보인다. 전부 보려면 INFO
