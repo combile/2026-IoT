@@ -17,7 +17,7 @@
 
 | 열 | 뜻 |
 |---|---|
-| `round` | 라운드 번호 (0부터). `attack_log.csv`와 이 열로 합친다 |
+| `round` | 라운드 번호 (0부터). 공격 기록 `results/attack_logs/<같은 이름>.csv`와 이 열로 합친다 |
 | `acc` | 테스트 정확도 (%) |
 | `ema_acc` | EMA 정확도 (%) |
 | `m_norm` | 서버 모멘텀 크기 ‖m‖. FedAvg는 빈 칸 |
