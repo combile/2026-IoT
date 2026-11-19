@@ -1,0 +1,47 @@
+diff --git a/trainers/base_trainer.py b/trainers/base_trainer.py
+index e65dde3..85078b7 100755
+--- a/trainers/base_trainer.py
++++ b/trainers/base_trainer.py
+@@ -41,6 +41,21 @@ import matplotlib.pyplot as plt
+ 
+ 
+ 
++class _SharedClients:
++    """[Colab memory] self.clients[i] 자리에 클라이언트 객체 하나를 돌려준다. client_index는 로그용이라 바꿔 둔다."""
++
++    def __init__(self, client, n):
++        self.client, self.n = client, n
++
++    def __getitem__(self, idx):
++        assert not isinstance(idx, slice)
++        self.client.client_index = int(idx)
++        return self.client
++
++    def __len__(self):
++        return self.n
++
++
+ @TRAINER_REGISTRY.register()
+ class Trainer():
+ 
+@@ -81,7 +96,10 @@ class Trainer():
+         self.local_lr_decay = trainer_args.local_lr_decay
+ 
+ 
+-        self.clients: List[Client] = [client_type(self.args, client_index=c, model=copy.deepcopy(self.model)) for c in range(self.args.trainer.num_clients)]
++        # [Colab memory] 클라이언트 100명분 모델(각 2개)을 따로 만들지 않고 클라이언트 객체 하나를 돌려 쓴다.
++        # 순차 실행(multiprocessing=False)에서는 setup()이 매 라운드 모델·옵티마이저를 새로 채우므로 결과가 같다.
++        self._shared_client = client_type(self.args, client_index=0, model=copy.deepcopy(self.model))
++        self.clients = _SharedClients(self._shared_client, self.args.trainer.num_clients)
+         self.server = server
+         if self.args.server.momentum > 0 or self.args.client.get('Dyn'):
+             self.server.set_momentum(self.model)
+@@ -157,6 +175,8 @@ class Trainer():
+             client.setup(**setup_inputs)
+             # Local Training
+             local_model, local_loss_dict = client.local_train(global_epoch=task['global_epoch'])
++            # [Colab memory] 공유 모델이 다음 클라이언트 학습에 덮어쓰이지 않게 복사한다
++            local_model = {k: v.clone() for k, v in local_model.items()}
+             # [Attack] 모델 오염: 공격 구간의 악성 클라이언트만 Δ를 조작 (Δ는 받은 모델 기준)
+             local_model = self.attack.maybe_poison(task['client_idx'], task['global_epoch'],
+                                                    local_model, task['state_dict'])
