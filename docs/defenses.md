@@ -9,6 +9,7 @@
 | `defenses/aggregators.py` | Krum, Multi-Krum, Trimmed Mean, Median과 서버 연결 함수 `robust_aggregate` | 2. 집계 함수 분리 |
 | `configs/defense/default.yaml` | 방어자가 가정하는 악성 비율 `assumed_ratio` | 4. f를 설정에서 받음 |
 | `integration/defense_integration.patch` | FedACG `servers/base.py`의 `Server`, `ServerM` 집계에 연결. 다른 패치와 겹치지 않으므로 적용 순서는 상관없다 | - |
+| `integration/colab_memory.patch` | 코랩 무료판(메모리 12.7GB)용. FedACG 원본은 처음에 클라이언트 100명분 모델(1명당 2개)을 모두 만들다가 메모리가 부족해 멈춘다. 이 패치는 클라이언트 객체 하나를 돌려 쓰게 바꾼다. 순차 실행(`multiprocessing=False`)에서는 결과가 원본과 같다 | - |
 | `notebooks/colab_run.ipynb` | 코랩 실행 순서 (설치, 패치, 테스트, 2라운드 점검, 실험) | - |
 | `tests/test_defenses.py` | 집계 규칙과 원본 집계 일치 여부 테스트 | - |
 
@@ -52,6 +53,7 @@ Krum과 Multi-Krum은 라운드마다 고른 클라이언트 ID를 전체 로그
 - f = 0인 Multi-Krum(전원 평균)의 새 모델과 모멘텀이 원본 `ServerM.aggregate` 결과와 같다(FedACG, FedAvgM, FedAvg).
 - 부호 반전 ×10 공격자 3명/10명에서 네 방식 모두 평균보다 정상 방향에 가깝다. Krum 계열은 공격자를 고르지 않는다.
 - FedACG 원본 코드에 `fedacg_integration.patch`, `defense_integration.patch`를 적용한 상태에서 ResNet-18 실제 크기(파라미터 1,117만 개)로 네 방식이 모두 돌아간다.
+- `colab_memory.patch`를 적용하기 전과 후에 CIFAR-10 1라운드를 같은 시드로 돌렸다(FedACG + Krum, 모델 오염 30%). 클라이언트 10명의 손실, Krum이 고른 클라이언트([54]), 정확도, ‖m‖이 모두 같았다.
 
 ## 첫 회의에서 확정할 값 ([TBD])
 
