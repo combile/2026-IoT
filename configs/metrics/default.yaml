@@ -1,0 +1,3 @@
+# 지표 로깅 (공통 지침: 정확도는 계수 0.9 지수이동평균)
+ema: 0.9                  # EMA 계수. ema <- 0.9 * ema + 0.1 * acc
+results_dir: results      # 결과 CSV를 모으는 폴더 (실행 위치 기준)
