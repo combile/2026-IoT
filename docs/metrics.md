@@ -7,7 +7,8 @@
 | 파일 | 내용 | 가이드 항목 |
 |---|---|---|
 | `metrics/logger.py` | `MetricsLogger`(라운드별 CSV 기록, EMA 계산), `momentum_norm`(‖m‖), `result_csv_name`(결과 파일 이름) | 1. 정확도·EMA, 2. ‖m‖ |
-| `configs/metrics/default.yaml` | EMA 계수(0.9), 결과 폴더 | 공통 지침 |
+| `metrics/run_log.py` | `setup_run_logging`(화면은 요약만, 전체 로그는 실행별 파일), `round_summary`(화면 한 줄) | - |
+| `configs/metrics/default.yaml` | EMA 계수(0.9), 결과 폴더, 화면 로그 수준 | 공통 지침 |
 | `integration/metrics_integration.patch` | FedACG 학습 루프 연결. `fedacg_integration.patch` 다음에 적용한다 | - |
 
 ## 결과 CSV
@@ -20,6 +21,18 @@
 | `acc` | 테스트 정확도 (%) |
 | `ema_acc` | EMA 정확도 (%) |
 | `m_norm` | 서버 모멘텀 크기 ‖m‖. FedAvg는 빈 칸 |
+
+## 화면 출력과 로그 파일
+
+| | 화면(콘솔) | 로그 파일 |
+|---|---|---|
+| 위치 | - | `results/logs/<결과 이름>.log` (예: `results/logs/fedacg_krum_lf_20_s1.log`) |
+| 내용 | 라운드당 한 줄 `[Round 12] acc 45.10% \| EMA 43.20% \| ‖m‖ 1.9235`와 경고 | INFO 이상 전부 (클라이언트별 학습 기록, 선택된 클라이언트, 공격 여부 등) |
+| 설정 | `metrics.console_level` (기본 `WARNING`, 전부 보려면 `metrics.console_level=INFO`) | 항상 INFO |
+
+- 로그 파일은 실행마다 새로 쓴다. 같은 설정으로 다시 돌리면 덮어쓴다.
+- Hydra 기본 로그 파일 `federated_train.log`는 모든 실행이 한 파일에 이어 붙어 섞이므로 학습 시작 시 뗀다(빈 파일만 남는다).
+- 원본 코드의 `print()` 출력(시작 시 설정 몇 줄, 50라운드마다 클라이언트별 손실 가중치)은 그대로 화면에 나온다.
 
 ## 동작 정의 (3장 "평가 지표"에 옮길 수 있게 적음)
 

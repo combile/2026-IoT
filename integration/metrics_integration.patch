@@ -11,37 +11,62 @@ index eac6eb9..f8dc502 100755
    - override hydra/hydra_logging: colorlog
  
 diff --git a/trainers/base_trainer.py b/trainers/base_trainer.py
-index 7d173cd..46c3d75 100755
+index 7d173cd..e65dde3 100755
 --- a/trainers/base_trainer.py
 +++ b/trainers/base_trainer.py
-@@ -30,6 +30,7 @@ from torch.utils.data import DataLoader
+@@ -30,6 +30,8 @@ from torch.utils.data import DataLoader
  
  from utils import terminate_processes, initalize_random_seed, save_checkpoint
  from attacks import AttackManager
-+from metrics import MetricsLogger, momentum_norm, result_csv_name
++from attacks import parse_attack_config
++from metrics import MetricsLogger, momentum_norm, result_csv_name, round_summary, setup_run_logging
  import csv
  from omegaconf import DictConfig,OmegaConf
  
-@@ -86,6 +87,11 @@ class Trainer():
+@@ -57,6 +59,12 @@ class Trainer():
+         self.device = device
+         self.model = model
+ 
++        # [Metrics] 화면에는 라운드 요약과 경고만, 전체 로그는 실행별 파일 results/logs/<결과 이름>.log에 남긴다
++        self.result_name = result_csv_name(self.args, parse_attack_config(self.args.attack))
++        log_path = Path(self.args.metrics.results_dir) / "logs" / Path(self.result_name).with_suffix(".log")
++        setup_run_logging(log_path, console_level=self.args.metrics.console_level)
++        logger.warning(f"Full log : {log_path}")
++
+         self.checkpoint_path = Path(self.args.checkpoint_path)
+         mode = self.args.split.mode 
+         if self.args.split.mode == 'dirichlet':
+@@ -86,6 +94,11 @@ class Trainer():
          self.attack_log = []
          logger.info(f"Attack: {self.attack.cfg}")
  
 +        # [Metrics] 결과 CSV: 라운드별 정확도, EMA 정확도, ‖m‖ (configs/metrics/default.yaml)
-+        metrics_path = Path(self.args.metrics.results_dir) / result_csv_name(self.args, self.attack.cfg)
++        metrics_path = Path(self.args.metrics.results_dir) / self.result_name
 +        self.metrics = MetricsLogger(metrics_path, ema_coef=self.args.metrics.ema)
-+        logger.info(f"Metrics CSV : {metrics_path}")
++        logger.warning(f"Metrics CSV : {metrics_path}")
 +
          test_loader = DataLoader(self.datasets["test"],
                                  batch_size=args.evaler.batch_size if args.evaler.batch_size > 0 else args.batch_size,
                                  shuffle=False, num_workers=args.num_workers)
-@@ -261,7 +267,9 @@ class Trainer():
+@@ -261,7 +274,11 @@ class Trainer():
              
              model_device = next(self.model.parameters()).device
              if self.args.eval.freq > 0 and epoch % self.args.eval.freq == 0:
 -                self.evaluate(epoch=epoch, local_datasets=local_datasets)
 +                results = self.evaluate(epoch=epoch, local_datasets=local_datasets)
 +                # [Metrics] ‖m‖은 이번 라운드 집계 직후의 서버 모멘텀이다. FedAvg는 모멘텀이 없어 빈 칸으로 남긴다.
-+                self.metrics.log(epoch, results["acc"], momentum_norm(getattr(self.server, "global_momentum", None)))
++                m_norm = momentum_norm(getattr(self.server, "global_momentum", None))
++                ema = self.metrics.log(epoch, results["acc"], m_norm)
++                logger.warning(round_summary(epoch, results["acc"], ema, m_norm))
  
              if (self.args.save_freq > 0 and (epoch + 1) % self.args.save_freq == 0) or (epoch + 1 == self.args.trainer.global_rounds):
                  self.save_model(epoch=epoch)
+@@ -338,7 +355,7 @@ class Trainer():
+             f"acc/{self.args.dataset.name}": acc,
+             }
+ 
+-        logger.warning(f'[Epoch {epoch}] Test Accuracy: {acc:.2f}%')
++        logger.info(f'[Epoch {epoch}] Test Accuracy: {acc:.2f}%')
+ 
+         plt.close()
+         

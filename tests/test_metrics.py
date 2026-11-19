@@ -1,4 +1,6 @@
 import csv
+import io
+import logging
 import math
 from pathlib import Path
 
@@ -8,7 +10,7 @@ import yaml
 from omegaconf import OmegaConf
 
 from attacks import parse_attack_config
-from metrics import MetricsLogger, momentum_norm, result_csv_name
+from metrics import MetricsLogger, momentum_norm, result_csv_name, round_summary, setup_run_logging
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -123,3 +125,64 @@ def test_result_name_fedacg_krum_lf():
 def test_result_name_fedavg_baseline_defaults_to_mean():
     args = make_args({"type": "Server", "momentum": -1}, seed=3)
     assert result_csv_name(args, attack_cfg("none", 0.0)) == "fedavg_mean_none_0_s3.csv"
+
+
+# ---------- 화면/파일 로그 분리 ----------
+
+@pytest.fixture
+def clean_root_logger():
+    root = logging.getLogger()
+    saved_handlers, saved_level = root.handlers[:], root.level
+    root.handlers = []
+    root.setLevel(logging.INFO)
+    yield root
+    for h in root.handlers:
+        h.close()
+    root.handlers = saved_handlers
+    root.setLevel(saved_level)
+
+
+def test_console_shows_only_warnings_file_keeps_everything(tmp_path, clean_root_logger):
+    console = io.StringIO()
+    clean_root_logger.addHandler(logging.StreamHandler(console))
+    path = tmp_path / "logs" / "r.log"
+    setup_run_logging(path, console_level="WARNING")
+
+    log = logging.getLogger("clients.base_client")
+    log.info("client detail")
+    log.warning("round summary")
+
+    assert "client detail" not in console.getvalue()
+    assert "round summary" in console.getvalue()
+    text = path.read_text()
+    assert "client detail" in text and "round summary" in text
+
+
+def test_removes_shared_hydra_log_file(tmp_path, clean_root_logger):
+    """Hydra 기본 federated_train.log는 모든 실행이 한 파일에 섞이므로 뗀다."""
+    shared = tmp_path / "federated_train.log"
+    clean_root_logger.addHandler(logging.FileHandler(shared))
+    setup_run_logging(tmp_path / "r.log", console_level="WARNING")
+    logging.getLogger("x").info("only in run log")
+    assert "only in run log" not in shared.read_text()
+
+
+def test_run_log_overwritten_on_rerun(tmp_path, clean_root_logger):
+    path = tmp_path / "r.log"
+    setup_run_logging(path, console_level="WARNING")
+    logging.getLogger("x").info("first run")
+    for h in clean_root_logger.handlers:
+        h.close()
+    clean_root_logger.handlers = []
+    setup_run_logging(path, console_level="WARNING")
+    assert "first run" not in path.read_text()
+
+
+def test_round_summary_line():
+    assert round_summary(12, 45.1, 43.2, 1.92345) == "[Round 12] acc 45.10% | EMA 43.20% | ‖m‖ 1.9235"
+    assert round_summary(3, 10.0, 10.0, None) == "[Round 3] acc 10.00% | EMA 10.00%"
+
+
+def test_config_has_console_level():
+    cfg = yaml.safe_load((ROOT / "configs" / "metrics" / "default.yaml").read_text())
+    assert cfg["console_level"] == "WARNING"
