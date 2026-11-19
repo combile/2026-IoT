@@ -11,7 +11,8 @@ from typing import Optional
 FILE_FORMAT = "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"
 
 
-def setup_run_logging(path, console_level: str) -> Path:
+def setup_run_logging(path, console_level: str, append: bool = False) -> Path:
+    """append=True(이어 돌리기)면 기존 로그 파일 뒤에 이어 쓴다."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     root = logging.getLogger()
@@ -21,7 +22,7 @@ def setup_run_logging(path, console_level: str) -> Path:
             handler.close()
         elif isinstance(handler, logging.StreamHandler):
             handler.setLevel(console_level)
-    file_handler = logging.FileHandler(path, mode="w", encoding="utf-8")
+    file_handler = logging.FileHandler(path, mode="a" if append else "w", encoding="utf-8")
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(logging.Formatter(FILE_FORMAT))
     root.addHandler(file_handler)

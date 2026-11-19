@@ -36,15 +36,21 @@ class MetricsLogger:
     EMA는 첫 정확도에서 시작해 ema ← coef·ema + (1−coef)·acc로 갱신한다.
     """
 
-    def __init__(self, path, ema_coef: float):
+    def __init__(self, path, ema_coef: float, start_round: int = 0, ema: Optional[float] = None):
+        """start_round > 0이면 이어 돌리기다: round < start_round인 줄은 남기고 EMA는 ema에서 잇는다."""
         if not 0.0 <= ema_coef < 1.0:
             raise ValueError(f"metrics.ema는 [0, 1) 범위여야 한다: {ema_coef}")
         self.path = Path(path)
         self.ema_coef = ema_coef
         self.ema: Optional[float] = None
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.path, "w", newline="") as f:
-            csv.writer(f).writerow(FIELDS)
+        if start_round > 0:
+            from resume.csv_rows import truncate_rows
+            truncate_rows(self.path, start_round, FIELDS)
+            self.ema = None if ema is None else float(ema)
+        else:
+            with open(self.path, "w", newline="") as f:
+                csv.writer(f).writerow(FIELDS)
 
     def log(self, rnd: int, acc: float, m_norm: Optional[float]) -> float:
         acc = float(acc)
