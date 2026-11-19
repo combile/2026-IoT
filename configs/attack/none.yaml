@@ -1,0 +1,14 @@
+# 무공격 기준선
+type: none
+ratio: 0.0
+selection: fixed
+start_round: 0
+end_round: null
+label_flip:
+  mode: reverse
+  pairs: null
+  target: null
+model_poison:
+  scale: 1.0
+  sign_flip: false
+  noise_std: 0.0

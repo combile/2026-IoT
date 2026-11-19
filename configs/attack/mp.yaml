@@ -1,0 +1,15 @@
+# 모델 오염 (model poisoning)
+# [TBD] 표시는 첫 회의에서 확정할 값이다. 지금 값은 임시 기본값이다.
+type: mp
+ratio: 0.2                # 10% / 20% / 30% 중 하나. 실행 시 attack.ratio=0.1 처럼 덮어쓴다
+selection: fixed          # [TBD]
+start_round: 100          # [TBD]
+end_round: 200            # [TBD]
+label_flip:               # mp에서는 쓰지 않는다
+  mode: reverse
+  pairs: null
+  target: null
+model_poison:
+  scale: 3.0              # 변화량 확대 배율 s                               [TBD]
+  sign_flip: true         # true면 Δ' = -s·Δ                                [TBD]
+  noise_std: 0.0          # 0이면 노이즈 없음 (무작위 노이즈 주입 실험용)

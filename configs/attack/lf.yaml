@@ -1,0 +1,15 @@
+# 라벨 플리핑 (data poisoning)
+# [TBD] 표시는 첫 회의에서 확정할 값이다. 지금 값은 임시 기본값이다.
+type: lf
+ratio: 0.2                # 10% / 20% / 30% 중 하나. 실행 시 attack.ratio=0.1 처럼 덮어쓴다
+selection: fixed          # fixed: 고정 ID / random: 라운드마다 다시 뽑음  [TBD]
+start_round: 100          # 공격 시작 라운드 (포함)                          [TBD]
+end_round: 200            # 공격 종료 라운드 (미포함). null이면 끝까지      [TBD]
+label_flip:
+  mode: reverse           # reverse: y -> C-1-y / pairs / all_to_one      [TBD]
+  pairs: null             # pairs 모드 예: [[3, 5], [5, 3]]
+  target: null            # all_to_one 모드의 목표 라벨
+model_poison:             # lf에서는 쓰지 않는다
+  scale: 1.0
+  sign_flip: false
+  noise_std: 0.0
