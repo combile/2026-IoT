@@ -236,3 +236,56 @@ def test_result_filename():
     assert result_filename("FedACG", "Krum", "lf", 20, 1) == "fedacg_krum_lf_20_s1.csv"
     assert result_filename("fedavg", "multi-krum", "mp", 10, 3) == "fedavg_multikrum_mp_10_s3.csv"
     assert result_filename("fedacg", "trimmed_mean", "none", 0, 2) == "fedacg_trimmedmean_none_0_s2.csv"
+
+
+# ---------------- 공격 기록 파일 ----------------
+def _hydra_args(tmp_path, attack="lf", **server):
+    omegaconf = pytest.importorskip("omegaconf")
+    return omegaconf.OmegaConf.create({
+        "seed": 1, "trainer": {"num_clients": 100},
+        "server": {"FedACG": True, **server},
+        "attack": load_cfg(attack, ratio=0.2, start_round=1, end_round=2),
+        "metrics": {"results_dir": str(tmp_path / "results")},
+    })
+
+
+def _read_rows(path):
+    import csv
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def test_attack_log_written_each_round_under_results(tmp_path):
+    m = AttackManager.from_args(_hydra_args(tmp_path, aggregator="krum"), num_classes=10)
+    path = tmp_path / "results" / "attack_logs" / "fedacg_krum_lf_20_s1.csv"
+    assert m.log_path == path
+    assert _read_rows(path) == []                              # 헤더만 있음
+    infos = [m.begin_round(r, range(10)) for r in range(3)]
+    rows = _read_rows(path)                                    # 학습 끝나기 전에도 라운드마다 남아 있음
+    assert [r["round"] for r in rows] == ["0", "1", "2"]
+    assert [r["attack_active"] for r in rows] == ["0", "1", "0"]
+    assert [int(r["n_malicious"]) for r in rows] == [i.n_malicious for i in infos]
+
+
+def test_attack_log_name_matches_metrics_csv(tmp_path):
+    from metrics.logger import result_csv_name
+    args = _hydra_args(tmp_path, attack="mp")
+    m = AttackManager.from_args(args, num_classes=10)
+    assert m.log_path.name == result_csv_name(args, m.cfg) == "fedacg_mean_mp_20_s1.csv"
+
+
+def test_attack_log_rerun_overwrites(tmp_path):
+    args = _hydra_args(tmp_path)
+    m = AttackManager.from_args(args, num_classes=10)
+    m.begin_round(0, range(10))
+    m2 = AttackManager.from_args(args, num_classes=10)
+    assert _read_rows(m2.log_path) == []
+
+
+def test_no_attack_log_without_metrics_config(tmp_path):
+    omegaconf = pytest.importorskip("omegaconf")
+    args = omegaconf.OmegaConf.create({"seed": 1, "trainer": {"num_clients": 100},
+                                       "attack": load_cfg("lf")})
+    m = AttackManager.from_args(args, num_classes=10)
+    assert m.log_path is None
+    m.begin_round(0, range(10))                                # 파일 없이도 그대로 동작

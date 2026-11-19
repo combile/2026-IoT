@@ -50,8 +50,11 @@ attack_info = self.attack.begin_round(rnd, selected_client_ids)   # n, f_r 기�
 
 ## 로그
 
-`attack_log.csv`에 라운드마다 다음 열을 남긴다.
-- `round`, `attack_active`, `n_selected`(n), `n_malicious`(f_r), `malicious_ids`
+공격 기록은 지표 CSV와 같은 이름으로 `results/attack_logs/`에 남는다(예: `results/attack_logs/fedacg_krum_lf_20_s1.csv`).
+- 열: `round`, `attack_active`, `n_selected`(n), `n_malicious`(f_r), `malicious_ids`
+- 라운드마다 바로 한 줄씩 쓴다. 학습이 중간에 끊겨도 그때까지의 라운드는 남는다.
+- 지표 CSV처럼 실행마다 새로 쓴다. 같은 설정과 시드로 다시 돌리면 덮어쓴다.
+- 폴더는 `metrics.results_dir`를 따른다. 학습이 끝날 때 `checkpoints/.../<exp_name>/attack_log.csv`에도 한 번 더 저장된다(이전 방식, 호환용).
 
 강윤서 님 담당:
 - 결과 CSV(정확도, EMA, ‖m‖)와 `round` 기준으로 합칠 수 있다.
