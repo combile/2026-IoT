@@ -1,6 +1,6 @@
 """이어 돌리기: 끊긴 실행을 마지막 체크포인트부터 같은 결과로 다시 시작한다.
 
-체크포인트(<결과 이름>.pt)에 담는 것
+체크포인트(<결과 이름>.r<라운드>.pt)에 담는 것
 - round          : 마지막으로 끝낸 라운드 r. 다시 시작하면 r+1부터 돈다
 - model          : 그 라운드 집계 후 글로벌 모델
 - server         : 서버 상태 텐서(global_momentum = m, global_delta, global_v 중 있는 것)
@@ -13,10 +13,10 @@ FedACG 원본 체크포인트는 모델만 저장해서 이어 돌리면 m이 0�
 """
 import copy
 import logging
-import os
 import random
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -96,6 +96,7 @@ class ResumeManager:
         self.keep_final = bool(keep_final)
         self.strict = bool(strict)
         self.config = config
+        self.loaded_path: Optional[Path] = None
 
     @classmethod
     def from_args(cls, args: Any, result_name: str) -> Optional["ResumeManager"]:
@@ -110,17 +111,56 @@ class ResumeManager:
         return cls(path, every=cfg.every, keep_final=cfg.keep_final, strict=cfg.strict,
                    config=_to_plain(args))
 
+    # ---- 파일 ----
+    # 구글 드라이브는 이름이 같은 파일을 여러 개 허용한다. 공유받은 폴더에서 os.replace로 덮어쓰면
+    # 교체되지 않고 "이름 (1).pt", "이름 (2).pt" 같은 복사본이 쌓였다. 그래서 덮어쓰지 않는다.
+    # 라운드 번호가 붙은 새 파일(<결과 이름>.r00019.pt)에 다 쓴 뒤, 이 실행의 다른 체크포인트 파일을 지운다.
+    def round_path(self, rnd: int) -> Path:
+        return self.path.with_name(f"{self.path.stem}.r{int(rnd):05d}.pt")
+
+    def files(self) -> List[Path]:
+        """이 실행의 체크포인트 파일 전부: 라운드 번호 파일, 예전 이름(<결과 이름>.pt),
+        드라이브 복사본("... (n).pt"), 쓰다 만 임시 파일(.pt.tmp)."""
+        folder = self.path.parent
+        if not folder.exists():
+            return []
+        pattern = re.compile(rf"^{re.escape(self.path.stem)}(\.r\d+)?( \(\d+\))?\.pt(\.tmp)?$")
+        return sorted(p for p in folder.iterdir() if pattern.match(p.name))
+
+    def _remove(self, paths) -> None:
+        for p in paths:
+            try:
+                p.unlink()
+            except FileNotFoundError:
+                pass
+
     # ---- 불러오기 ----
+    def _newest_loadable(self) -> Tuple[Optional[Path], Optional[Dict[str, Any]]]:
+        """읽을 수 있는 체크포인트 중 라운드가 가장 큰 것. 쓰다 만 파일은 건너뛴다."""
+        best_path, best = None, None
+        for p in self.files():
+            if p.name.endswith(".tmp"):
+                continue
+            try:
+                state = torch.load(p, map_location="cpu", weights_only=False)
+            except Exception as e:   # 저장 중에 끊겨 잘린 파일
+                logger.warning(f"[Resume] 읽을 수 없는 체크포인트를 건너뛴다: {p} ({type(e).__name__})")
+                continue
+            if best is None or int(state.get("round", -1)) > int(best.get("round", -1)):
+                best_path, best = p, state
+        return best_path, best
+
     def load(self) -> Optional[Dict[str, Any]]:
-        """체크포인트가 있으면 내용을, 없으면 None을 돌려준다. 설정이 다르면 strict일 때 멈춘다."""
-        if not self.path.exists():
+        """체크포인트가 있으면 가장 최근 것을, 없으면 None을 돌려준다. 설정이 다르면 strict일 때 멈춘다."""
+        path, state = self._newest_loadable()
+        if state is None:
             return None
-        state = torch.load(self.path, map_location="cpu", weights_only=False)
+        self.loaded_path = path
         if state.get("version") != FORMAT_VERSION:
-            raise RuntimeError(f"체크포인트 형식이 다르다: {self.path} (version={state.get('version')})")
+            raise RuntimeError(f"체크포인트 형식이 다르다: {path} (version={state.get('version')})")
         diff = config_diff(state["config"], self.config)
         if diff:
-            msg = (f"체크포인트와 지금 설정이 다르다: {self.path}\n  " + "\n  ".join(diff) +
+            msg = (f"체크포인트와 지금 설정이 다르다: {path}\n  " + "\n  ".join(diff) +
                    "\n같은 실험이 아니면 체크포인트를 지우거나 resume.enabled=false로 처음부터 돌린다.")
             if self.strict:
                 raise RuntimeError(msg)
@@ -165,13 +205,16 @@ class ResumeManager:
             "config": self.config,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".pt.tmp")
-        torch.save(state, tmp)
-        os.replace(tmp, self.path)   # 저장 중에 끊겨도 이전 체크포인트는 온전하다
-        logger.info(f"[Resume] saved round {rnd} -> {self.path}")
+        new = self.round_path(rnd)
+        torch.save(state, new)
+        # 새 파일을 다 쓴 뒤에 예전 것을 지운다. 저장 중에 끊겨도 이전 체크포인트는 남는다
+        self._remove(p for p in self.files() if p != new)
+        logger.info(f"[Resume] saved round {rnd} -> {new}")
 
     def finish(self) -> None:
-        """학습이 끝까지 끝났을 때 부른다. keep_final=false면 체크포인트를 지운다."""
-        if not self.keep_final and self.path.exists():
-            self.path.unlink()
-            logger.info(f"[Resume] finished, removed {self.path}")
+        """학습이 끝까지 끝났을 때 부른다. keep_final=false면 이 실행의 체크포인트 파일을 모두 지운다."""
+        if not self.keep_final:
+            old = self.files()
+            self._remove(old)
+            if old:
+                logger.info(f"[Resume] finished, removed {len(old)} checkpoint file(s) for {self.path.stem}")
