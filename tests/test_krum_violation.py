@@ -82,3 +82,13 @@ def test_cli_writes_two_csvs(tmp_path):
                    check=True, capture_output=True)
     assert (tmp_path / "results" / "krum_violation_runs.csv").exists()
     assert (tmp_path / "results" / "krum_violation.csv").exists()
+
+
+def test_cli_out_dir_writes_there_not_into_results(tmp_path):
+    logs = tmp_path / "results" / "attack_logs"
+    write_log(logs / "fedacg_krum_lf_20_s1.csv", [(1, 10, 4)])
+    out = tmp_path / "work" / "new"
+    subprocess.run([sys.executable, str(ROOT / "scripts" / "krum_violation.py"), str(tmp_path / "results"),
+                    "--out-dir", str(out)], check=True, capture_output=True)
+    assert (out / "krum_violation_runs.csv").exists() and (out / "krum_violation.csv").exists()
+    assert not (tmp_path / "results" / "krum_violation.csv").exists()

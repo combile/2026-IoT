@@ -7,7 +7,8 @@
 ```bash
 python scripts/krum_violation.py results/
 ```
-코랩에서는 `!python /content/2026-IoT/scripts/krum_violation.py /content/drive/MyDrive/2026-IoT/results`.
+코랩에서는 `!python /content/2026-IoT/scripts/krum_violation.py /content/drive/MyDrive/2026-IoT/results --out-dir /content/drive/MyDrive/2026-IoT-work`.
+공유 폴더를 바로가기로 쓰는 경우 결과 CSV를 공유 폴더에 다시 쓰면 같은 이름 파일이 새로 생기므로, `--out-dir`로 내 드라이브 폴더에 쓴다. 생략하면 `results_dir`에 쓴다.
 공격 기록(`results/attack_logs/`)만 읽으므로 실험 도중에도 돌려 볼 수 있다.
 
 ## 정의 (3장에 옮길 수 있게 적음)

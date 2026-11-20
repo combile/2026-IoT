@@ -9,7 +9,7 @@ n은 라운드 참여 인원(n_selected), f는 그 라운드의 실제 악성 �
 
 사용 예:
     python scripts/krum_violation.py results/
-    python scripts/krum_violation.py /content/drive/MyDrive/2026-IoT/results
+    python scripts/krum_violation.py /content/drive/MyDrive/2026-IoT/results --out-dir /content/drive/MyDrive/2026-IoT-work
 """
 import argparse
 import csv
@@ -107,18 +107,21 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("results_dir", help="attack_logs/가 들어 있는 결과 폴더")
     parser.add_argument("--num-clients", type=int, default=None, help="기본값: 실험 설정의 trainer.num_clients")
+    parser.add_argument("--out-dir", default=None, help="결과 CSV를 쓸 폴더. 기본값: results_dir")
     a = parser.parse_args()
     num_clients = a.num_clients or _num_clients_from_sweep()
 
     results_dir = Path(a.results_dir)
+    out_dir = Path(a.out_dir) if a.out_dir else results_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
     runs, groups = summarize(results_dir / "attack_logs", num_clients)
-    _write(runs, RUN_FIELDS, results_dir / "krum_violation_runs.csv")
-    _write(groups, GROUP_FIELDS, results_dir / "krum_violation.csv")
+    _write(runs, RUN_FIELDS, out_dir / "krum_violation_runs.csv")
+    _write(groups, GROUP_FIELDS, out_dir / "krum_violation.csv")
     for g in groups:
         measured = "-" if g["ratio_pct"] is None else f"{g['ratio_pct']:.1f}%"
         print(f"{g['attack']} {g['ratio']}%: n={g['n']}, 실행 {g['runs']}개, 위반 {g['violated']}/{g['rounds']}라운드 "
               f"({measured}), 이론값 {g['expected_pct']:.1f}%")
-    print(f"→ {results_dir / 'krum_violation.csv'}, {results_dir / 'krum_violation_runs.csv'}")
+    print(f"→ {out_dir / 'krum_violation.csv'}, {out_dir / 'krum_violation_runs.csv'}")
 
 
 if __name__ == "__main__":
