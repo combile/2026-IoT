@@ -1,0 +1,13 @@
+diff --git a/federated_train.py b/federated_train.py
+index 5bbc4ed..bd7862b 100755
+--- a/federated_train.py
++++ b/federated_train.py
+@@ -52,7 +52,7 @@ def main(args : DictConfig) -> None:
+         ))
+ 
+     initalize_random_seed(args)
+-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
++    device = torch.device("cuda:0" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+     print("device", device)
+ 
+     model = build_encoder(args)
