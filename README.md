@@ -40,6 +40,22 @@
 - 1차가 끝나면 같은 셀을 계속 돌려 2차로 넘어간다. 순서는 시드 1의 10%·30% → 시드 2 → 시드 3이다.
 - 결과는 공유 드라이브 폴더 `MyDrive/2026-IoT/results`에 모은다(노트북 5번 셀 설명 참고).
 
+### 코랩과 함께 다른 컴퓨터로 돌리기 (Mac 등)
+코랩 GPU 한도에 걸린 동안에도 Mac(MPS)이나 다른 GPU로 같은 대기열을 이어 돌릴 수 있다. 코랩과 동시에 돌려도 잠금 파일로 겹치지 않는다.
+
+1. Google Drive 데스크톱 앱을 설치하고 로그인한다. 공유 폴더가 `~/Library/CloudStorage/GoogleDrive-<계정>/My Drive/2026-IoT`에 보인다.
+2. FedACG 폴더를 만든다: `bash scripts/setup_local.sh ~/fedacg-local` (노트북 1~2번 셀과 같은 패치 + `mps_device.patch`)
+3. 돌린다:
+   ```bash
+   D="$HOME/Library/CloudStorage/GoogleDrive-<계정>/My Drive"
+   python scripts/run_local.py --fedacg ~/fedacg-local --results "$D/2026-IoT/results" \
+       --work "$D/2026-IoT-work" --worker 예다은-mac --spec configs/experiments/lf_sweep.yaml
+   ```
+- `--work`를 코랩의 `WORK`와 같은 폴더로 두면 어느 쪽에서 끊긴 실행이든 다른 쪽이 체크포인트부터 이어 받는다.
+- `--worker`는 코랩에서 쓰는 이름과 다르게 쓴다. 실행 중에는 잠금 파일을 10분마다 다시 써서, 오래 걸려도(Mac 80라운드 약 3시간 40분) 코랩이 가로채지 않는다.
+- `--work`에 `STOP` 파일을 만들면 지금 실행을 끝내고 멈춘다.
+- Mac M1 실측: 라운드당 약 165초(T4의 약 3.7배). FedACG의 AMP가 CUDA 전용이라 MPS에서는 fp32로 돈다. 실행 장치가 섞여도 같은 설정·시드라 비교에는 문제가 없지만, 4장에 "일부 실행은 Apple M1에서 수행"이라고 적는다.
+
 ### 한계 (5장에 적을 것)
 - 80라운드는 FedACG 논문(1000라운드)보다 훨씬 짧아 절대 정확도가 낮다. 이 연구는 같은 조건끼리의 비교(정확도 하락, 회복 라운드, ‖m‖ 추이)를 본다.
 - 1차 결과는 악성 비율 20%, 시드 1회 기준이다.
