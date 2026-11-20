@@ -73,7 +73,7 @@ def test_save_load_restore_roundtrip(tmp_path):
 
     model, server = model_and_server(0)
     rm.save(5, model, server, ema=42.5)
-    assert rm.path.exists() and not rm.path.with_suffix(".pt.tmp").exists()
+    assert rm.files() == [rm.round_path(5)]                       # 라운드 번호 파일 하나만
 
     state = ResumeManager.from_args(args, "run.csv").load()
     assert ResumeManager.start_round(state) == 6 and state["ema"] == 42.5
@@ -112,11 +112,11 @@ def test_finish_removes_checkpoint_unless_keep_final(tmp_path):
     rm = ResumeManager.from_args(make_args(tmp_path), "a.csv")
     rm.save(1, model, server, ema=None)
     rm.finish()
-    assert not rm.path.exists()
+    assert rm.files() == []
     rm_keep = ResumeManager.from_args(make_args(tmp_path, keep_final=True), "b.csv")
     rm_keep.save(1, model, server, ema=None)
     rm_keep.finish()
-    assert rm_keep.path.exists()
+    assert rm_keep.files() == [rm_keep.round_path(1)]
 
 
 # ---------------- 설정 비교 ----------------
@@ -223,3 +223,57 @@ def test_run_log_append(tmp_path):
                 root.removeHandler(h)
                 h.close()
         root.setLevel(old_level)
+
+
+# ---------------- 구글 드라이브 복사본 ----------------
+def test_save_replaces_older_round_files(tmp_path):
+    rm = ResumeManager.from_args(make_args(tmp_path), "run.csv")
+    model, server = model_and_server(0)
+    for r in (9, 19, 29):
+        rm.save(r, model, server, ema=None)
+    assert rm.files() == [rm.round_path(29)]
+    assert rm.round_path(29).name == "run.r00029.pt"
+
+
+def test_drive_duplicates_are_read_newest_and_cleaned(tmp_path):
+    """드라이브가 덮어쓰기 대신 "이름 (n).pt" 복사본을 만들었던 예전 방식의 파일이 남아 있어도
+    라운드가 가장 큰 것을 읽고, 다음 저장 때 모두 지운다."""
+    args = make_args(tmp_path)
+    rm = ResumeManager.from_args(args, "run.csv")
+    model, server = model_and_server(0)
+    folder = rm.path.parent
+    for i, r in enumerate([9, 19, 29, 39]):     # run.pt(라운드 9), run (1).pt(19), ...
+        rm.save(r, model, server, ema=float(r))
+        name = "run.pt" if i == 0 else f"run ({i}).pt"
+        rm.round_path(r).rename(folder / name)
+    (folder / "run.pt.tmp").write_bytes(b"partial")
+    state = ResumeManager.from_args(args, "run.csv").load()
+    assert state["round"] == 39 and state["ema"] == 39.0
+
+    rm.save(49, model, server, ema=None)
+    assert rm.files() == [rm.round_path(49)]
+    rm.finish()
+    assert rm.files() == []
+
+
+def test_truncated_newest_file_falls_back_to_previous(tmp_path):
+    args = make_args(tmp_path)
+    rm = ResumeManager.from_args(args, "run.csv")
+    model, server = model_and_server(0)
+    rm.save(19, model, server, ema=19.0)
+    rm.round_path(29).write_bytes(b"cut off while writing")   # 저장 중에 끊김
+    rm2 = ResumeManager.from_args(args, "run.csv")
+    state = rm2.load()
+    assert state["round"] == 19 and rm2.loaded_path == rm.round_path(19)
+
+
+def test_files_do_not_match_other_runs(tmp_path):
+    args = make_args(tmp_path)
+    model, server = model_and_server(0)
+    a = ResumeManager.from_args(args, "fedacg_mean_lf_20_s1.csv")
+    b = ResumeManager.from_args(args, "fedacg_mean_lf_20_s10.csv")
+    a.save(9, model, server, ema=None)
+    b.save(19, model, server, ema=None)
+    assert a.files() == [a.round_path(9)] and b.files() == [b.round_path(19)]
+    a.finish()
+    assert b.files() == [b.round_path(19)]
