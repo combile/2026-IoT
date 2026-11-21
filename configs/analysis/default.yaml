@@ -1,4 +1,4 @@
 # 결과 분석 정의 (analysis/summary.py, scripts/analyze.py)
-# [TBD] 표시는 팀에서 확정할 값이다. 지금 값은 임시 기본값이다.
-target_acc: 50.0           # 목표 도달 라운드: EMA 정확도가 처음 이 값(%) 이상이 된 라운드  [TBD]
-recovery_tolerance: 1.0    # 회복: 공격 종료 뒤 EMA 정확도가 같은 라운드 기준선 EMA − 이 값(%p) 이상이면 회복  [TBD]
+# 값의 근거: 무공격 기준선 30회 (docs/analysis.md "기준값과 근거")
+target_acc: 35.0           # 목표 도달 라운드: EMA 정확도가 처음 이 값(%) 이상이 된 라운드
+recovery_tolerance: 2.0    # 회복: 공격 종료 뒤 EMA 정확도가 같은 라운드 기준선 EMA − 이 값(%p) 이상이면 회복
